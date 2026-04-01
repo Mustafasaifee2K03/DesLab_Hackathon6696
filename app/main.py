@@ -9,7 +9,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .data_loader import load_seed_data
 from .agentic_workflow import refresh_live_catalog, run_recommendation_agent
 from .database import (
     get_all_content,
@@ -17,6 +16,7 @@ from .database import (
     get_user_profile,
     init_db,
     insert_feedback,
+    purge_seed_content,
     upsert_user_profile,
 )
 from .recommender import feedback_summary
@@ -33,18 +33,57 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+INTEREST_OPTIONS = [
+    "technology",
+    "ai",
+    "startup",
+    "software engineering",
+    "cybersecurity",
+    "data science",
+    "finance",
+    "business",
+    "science",
+    "movies",
+    "thriller",
+    "music",
+    "podcasts",
+    "fitness",
+    "wellness",
+    "travel",
+    "food",
+    "culture",
+    "history",
+    "education",
+]
+
 
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
-    synced = load_seed_data()
-    if synced:
-        print(f"Synced {synced} seed content records")
+    removed = purge_seed_content()
+    if removed:
+        print(f"Removed {removed} static seed records; app is running in dynamic live-content mode")
 
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("index.html", {"request": request, "domains": DOMAINS})
+    return templates.TemplateResponse(
+        "onboarding.html",
+        {
+            "request": request,
+            "interest_options": INTEREST_OPTIONS,
+        },
+    )
+
+
+@app.get("/preferences", response_class=HTMLResponse)
+def preferences_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("preferences.html", {"request": request, "domains": DOMAINS})
+
+
+@app.get("/feed", response_class=HTMLResponse)
+def feed_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("feed.html", {"request": request, "domains": DOMAINS})
 
 
 @app.get("/api/health")
@@ -94,7 +133,8 @@ def upsert_profile(user_id: str, payload: ProfilePayload) -> dict:
         "name": payload.name.strip(),
         "interests": [item.lower().strip() for item in payload.interests if item.strip()],
         "languages": [lang.lower().strip() for lang in payload.languages if lang.strip()],
-        "moods": [mood.lower().strip() for mood in payload.moods if mood.strip()],
+        "moods": [],
+        "demand_text": payload.demand_text.strip(),
         "domain_weights": normalized_weights,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -153,7 +193,12 @@ def refresh_live(
     if user_id:
         profile = get_user_profile(user_id)
         if profile:
-            query_terms = (profile["interests"] + profile["moods"])[:4] or query_terms
+            demand_tokens = [
+                token
+                for token in re.split(r"\W+", profile.get("demand_text", "").lower())
+                if len(token) > 2
+            ]
+            query_terms = (profile["interests"] + demand_tokens)[:6] or query_terms
             languages = profile["languages"] or languages
             if not domain:
                 domains = sorted(

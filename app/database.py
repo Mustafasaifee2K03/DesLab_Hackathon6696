@@ -52,6 +52,7 @@ def init_db() -> None:
                 interests TEXT NOT NULL,
                 languages TEXT NOT NULL,
                 moods TEXT NOT NULL,
+                demand_text TEXT NOT NULL DEFAULT '',
                 domain_weights TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -69,6 +70,16 @@ def init_db() -> None:
             )
             """
         )
+
+        # Lightweight migration for databases created before demand_text existed.
+        columns = {
+            row["name"]
+            for row in cursor.execute("PRAGMA table_info(user_profiles)").fetchall()
+        }
+        if "demand_text" not in columns:
+            cursor.execute(
+                "ALTER TABLE user_profiles ADD COLUMN demand_text TEXT NOT NULL DEFAULT ''"
+            )
 
 
 def content_count() -> int:
@@ -121,13 +132,14 @@ def upsert_user_profile(profile: dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT INTO user_profiles (
-                user_id, name, interests, languages, moods, domain_weights, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                user_id, name, interests, languages, moods, demand_text, domain_weights, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
                 name = excluded.name,
                 interests = excluded.interests,
                 languages = excluded.languages,
                 moods = excluded.moods,
+                demand_text = excluded.demand_text,
                 domain_weights = excluded.domain_weights,
                 updated_at = excluded.updated_at
             """,
@@ -137,6 +149,7 @@ def upsert_user_profile(profile: dict[str, Any]) -> None:
                 json.dumps(profile["interests"]),
                 json.dumps(profile["languages"]),
                 json.dumps(profile["moods"]),
+                profile.get("demand_text", ""),
                 json.dumps(profile["domain_weights"]),
                 profile["updated_at"],
             ),
@@ -153,6 +166,7 @@ def get_user_profile(user_id: str) -> dict[str, Any] | None:
     row["interests"] = json.loads(row["interests"])
     row["languages"] = json.loads(row["languages"])
     row["moods"] = json.loads(row["moods"])
+    row["demand_text"] = row.get("demand_text", "") or ""
     row["domain_weights"] = json.loads(row["domain_weights"])
     return row
 
@@ -252,3 +266,9 @@ def content_language_breakdown(domain: str | None = None) -> dict[str, int]:
         rows = conn.execute(query, params).fetchall()
 
     return {row["language"]: int(row["count"]) for row in rows}
+
+
+def purge_seed_content() -> int:
+    with get_connection() as conn:
+        cursor = conn.execute("DELETE FROM content_items WHERE id NOT LIKE 'live_%'")
+        return int(cursor.rowcount or 0)

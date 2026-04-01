@@ -1,19 +1,29 @@
-const state = {
-  currentUserId: "demo_user",
-  recommendations: [],
-};
-
+const DRAFT_KEY = "unisphere_profile_draft_v2";
 const domains = ["videos", "music", "podcasts", "movies", "news"];
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function csvToList(value) {
-  return value
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
+function getPage() {
+  return document.body.dataset.page || "";
+}
+
+function parseQuery() {
+  const params = new URLSearchParams(window.location.search);
+  return Object.fromEntries(params.entries());
+}
+
+function saveDraft(draft) {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+function loadDraft() {
+  try {
+    return JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
 }
 
 function selectedLanguages() {
@@ -22,34 +32,12 @@ function selectedLanguages() {
   );
 }
 
-function renderMeta(meta) {
-  const container = $("metaStats");
-  container.innerHTML = "";
-  const stats = [
-    `Content records: ${meta.content_count}`,
-    `Domains: ${meta.domains.join(", ")}`,
-    `Feedback actions: ${meta.actions.join(", ")}`,
-    `Agent: ${meta.agent_framework || "standard"}`,
-  ];
-
-  for (const text of stats) {
-    const span = document.createElement("span");
-    span.className = "pill";
-    span.textContent = text;
-    container.appendChild(span);
-  }
-}
-
-async function saveAndLoad() {
-  await upsertProfile();
-  await loadRecommendations();
-}
-
-function createDomainSliders() {
+function createDomainSliders(defaults = null) {
   const wrapper = $("weightSliders");
-  wrapper.innerHTML = "";
+  if (!wrapper) return;
 
-  const defaults = {
+  wrapper.innerHTML = "";
+  const baseline = defaults || {
     videos: 20,
     music: 20,
     podcasts: 20,
@@ -69,11 +57,11 @@ function createDomainSliders() {
     input.min = "0";
     input.max = "100";
     input.step = "1";
-    input.value = String(defaults[domain]);
+    input.value = String(baseline[domain] ?? 20);
     input.name = `weight_${domain}`;
 
     const output = document.createElement("output");
-    output.textContent = `${defaults[domain]}%`;
+    output.textContent = `${input.value}%`;
 
     input.addEventListener("input", () => {
       output.textContent = `${input.value}%`;
@@ -87,29 +75,45 @@ function createDomainSliders() {
 }
 
 function readDomainWeights() {
-  const entries = domains.map((domain) => {
-    const input = document.querySelector(`input[name='weight_${domain}']`);
-    return [domain, Number(input.value || 0)];
-  });
-  return Object.fromEntries(entries);
+  return Object.fromEntries(
+    domains.map((domain) => {
+      const input = document.querySelector(`input[name='weight_${domain}']`);
+      return [domain, Number(input?.value || 0)];
+    })
+  );
 }
 
-async function upsertProfile() {
-  const userId = $("userId").value.trim();
-  state.currentUserId = userId;
+function renderMeta(meta) {
+  const container = $("metaStats");
+  if (!container) return;
 
-  const payload = {
-    name: $("name").value.trim(),
-    interests: csvToList($("interests").value),
-    moods: csvToList($("moods").value),
-    languages: selectedLanguages(),
-    domain_weights: readDomainWeights(),
-  };
+  container.innerHTML = "";
+  const stats = [
+    `Content records: ${meta.content_count}`,
+    `Domains: ${meta.domains.join(", ")}`,
+    `Agent: ${meta.agent_framework || "standard"}`,
+  ];
 
+  for (const text of stats) {
+    const span = document.createElement("span");
+    span.className = "pill";
+    span.textContent = text;
+    container.appendChild(span);
+  }
+}
+
+async function upsertProfile(payload) {
+  const userId = payload.user_id;
   const resp = await fetch(`/api/users/${encodeURIComponent(userId)}/profile`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      name: payload.name,
+      interests: payload.interests,
+      demand_text: payload.demand_text,
+      languages: payload.languages,
+      domain_weights: payload.domain_weights,
+    }),
   });
 
   if (!resp.ok) {
@@ -117,14 +121,27 @@ async function upsertProfile() {
     throw new Error(err.detail || "Failed to save profile");
   }
 
-  const data = await resp.json();
-  $("profileStatus").textContent = "Profile saved successfully. Recommendations are updated below.";
+  return resp.json();
 }
 
-function cardActionButton(action, contentId) {
+async function loadFeedbackSummary(userId) {
+  const resp = await fetch(`/api/users/${encodeURIComponent(userId)}/feedback`);
+  if (!resp.ok) {
+    $("feedbackSummary").textContent = "";
+    return;
+  }
+  const data = await resp.json();
+  const summary = data.summary || {};
+  const chunks = ["like", "save", "dislike", "hide", "view"].map(
+    (key) => `${key}: ${summary[key] || 0}`
+  );
+  $("feedbackSummary").textContent = `Feedback stats -> ${chunks.join(" | ")}`;
+}
+
+function cardActionButton(userId, action, contentId, reloadFn) {
   return async (evt) => {
     evt.preventDefault();
-    const resp = await fetch(`/api/users/${encodeURIComponent(state.currentUserId)}/feedback`, {
+    const resp = await fetch(`/api/users/${encodeURIComponent(userId)}/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content_id: contentId, action }),
@@ -136,16 +153,16 @@ function cardActionButton(action, contentId) {
       return;
     }
 
-    await loadRecommendations();
+    await reloadFn();
   };
 }
 
-function renderCards(items) {
+function renderCards(userId, items, reloadFn) {
   const root = $("cards");
   root.innerHTML = "";
 
   if (!items.length) {
-    root.innerHTML = "<p>No recommendations found with the current combination of filters.</p>";
+    root.innerHTML = "<p>No relevant recommendations found. Try refining interests or demand text.</p>";
     return;
   }
 
@@ -172,7 +189,7 @@ function renderCards(items) {
 
     for (const btn of node.querySelectorAll("button[data-action]")) {
       const action = btn.dataset.action;
-      btn.addEventListener("click", cardActionButton(action, item.id));
+      btn.addEventListener("click", cardActionButton(userId, action, item.id, reloadFn));
     }
 
     if (item.saved) {
@@ -186,88 +203,150 @@ function renderCards(items) {
   }
 }
 
-async function loadFeedbackSummary() {
-  const resp = await fetch(`/api/users/${encodeURIComponent(state.currentUserId)}/feedback`);
-  if (!resp.ok) {
-    $("feedbackSummary").textContent = "";
+async function initOnboardingPage() {
+  const form = $("onboardingForm");
+  form.addEventListener("submit", (evt) => {
+    evt.preventDefault();
+
+    const userId = $("userId").value.trim();
+    const name = $("name").value.trim();
+    const interests = Array.from(
+      document.querySelectorAll("#interestOptions input[name='interests']:checked")
+    ).map((it) => it.value.toLowerCase());
+    const demandText = $("demandText").value.trim();
+
+    if (interests.length < 1) {
+      $("onboardingStatus").textContent = "Select at least one interest to continue.";
+      return;
+    }
+
+    if (demandText.length < 12) {
+      $("onboardingStatus").textContent = "Please provide a more specific demand description.";
+      return;
+    }
+
+    saveDraft({
+      user_id: userId,
+      name,
+      interests,
+      demand_text: demandText,
+      languages: ["en"],
+      domain_weights: { videos: 20, music: 20, podcasts: 20, movies: 20, news: 20 },
+    });
+
+    window.location.href = `/preferences?user_id=${encodeURIComponent(userId)}`;
+  });
+}
+
+async function initPreferencesPage() {
+  const draft = loadDraft();
+  if (!draft.user_id) {
+    window.location.href = "/";
     return;
   }
 
-  const data = await resp.json();
-  const summary = data.summary || {};
-  const chunks = ["like", "save", "dislike", "hide", "view"].map(
-    (key) => `${key}: ${summary[key] || 0}`
-  );
-  $("feedbackSummary").textContent = `Feedback stats -> ${chunks.join(" | ")}`;
+  $("profileSummary").textContent = `User ${draft.name} • Interests: ${draft.interests.join(", ")} • Demand: ${draft.demand_text}`;
+
+  createDomainSliders(draft.domain_weights);
+
+  if (Array.isArray(draft.languages)) {
+    for (const lang of draft.languages) {
+      const checkbox = document.querySelector(`#languages input[value='${lang}']`);
+      if (checkbox) checkbox.checked = true;
+    }
+  }
+
+  $("preferencesForm").addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    try {
+      const payload = {
+        ...draft,
+        languages: selectedLanguages(),
+        domain_weights: readDomainWeights(),
+      };
+      saveDraft(payload);
+      await upsertProfile(payload);
+      $("preferencesStatus").textContent = "Profile saved. Preparing your dynamic recommendations...";
+      window.location.href = `/feed?user_id=${encodeURIComponent(payload.user_id)}`;
+    } catch (err) {
+      $("preferencesStatus").textContent = err.message;
+    }
+  });
 }
 
-async function loadRecommendations() {
-  const domain = $("filterDomain").value;
-  const maxDuration = Number($("maxDuration").value || 180);
-  const resultLimit = Number($("resultLimit").value || 25);
-
-  const params = new URLSearchParams();
-  params.set("limit", String(resultLimit));
-  params.set("max_duration", String(maxDuration));
-  if (domain) params.set("domain", domain);
-
-  const resp = await fetch(
-    `/api/users/${encodeURIComponent(state.currentUserId)}/recommendations?${params.toString()}`
-  );
-
-  if (!resp.ok) {
-    const err = await resp.json();
-    $("feedMessage").textContent = "";
-    $("cards").innerHTML = `<p>${err.detail || "No recommendations"}</p>`;
+async function initFeedPage() {
+  const query = parseQuery();
+  const draft = loadDraft();
+  const userId = (query.user_id || draft.user_id || "").trim();
+  if (!userId) {
+    window.location.href = "/";
     return;
   }
 
-  const data = await resp.json();
-  state.recommendations = data.items || [];
-
-  const selectedLangs = (data.diagnostics?.selected_languages || []).join(", ") || "any";
-  const availableLangs = (data.diagnostics?.available_languages || []).join(", ") || "unknown";
-  if (data.message) {
-    const plan = data.diagnostics?.agent_planning_note || "";
-    $("feedMessage").textContent = `${data.message} Selected: ${selectedLangs}. Available: ${availableLangs}. ${plan}`.trim();
-  } else {
-    const liveAdded = data.diagnostics?.live_items_added || 0;
-    const liveText = liveAdded > 0 ? `Agent synced ${liveAdded} live items before ranking.` : "";
-    $("feedMessage").textContent = liveText;
+  if (draft.name) {
+    $("feedSubtitle").textContent = `Showing dynamic results for ${draft.name}. Demand focus: ${draft.demand_text || "custom"}.`;
   }
 
-  renderCards(state.recommendations);
-  await loadFeedbackSummary();
-}
+  async function loadRecommendations() {
+    const domain = $("filterDomain").value;
+    const maxDuration = Number($("maxDuration").value || 180);
+    const resultLimit = Number($("resultLimit").value || 25);
 
-async function init() {
-  createDomainSliders();
+    const params = new URLSearchParams();
+    params.set("limit", String(resultLimit));
+    params.set("max_duration", String(maxDuration));
+    if (domain) params.set("domain", domain);
+
+    const resp = await fetch(
+      `/api/users/${encodeURIComponent(userId)}/recommendations?${params.toString()}`
+    );
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      $("feedMessage").textContent = "";
+      $("cards").innerHTML = `<p>${err.detail || "Unable to fetch recommendations"}</p>`;
+      return;
+    }
+
+    const data = await resp.json();
+    const selectedLangs = (data.diagnostics?.selected_languages || []).join(", ") || "any";
+    const availableLangs = (data.diagnostics?.available_languages || []).join(", ") || "unknown";
+
+    if (data.message) {
+      $("feedMessage").textContent = `${data.message} Selected: ${selectedLangs}. Available: ${availableLangs}.`;
+    } else {
+      const plan = data.diagnostics?.agent_planning_note || "";
+      const liveAdded = data.diagnostics?.live_items_added || 0;
+      const extra = liveAdded > 0 ? ` Agent synced ${liveAdded} fresh items.` : "";
+      $("feedMessage").textContent = `${plan}${extra}`.trim();
+    }
+
+    renderCards(userId, data.items || [], loadRecommendations);
+    await loadFeedbackSummary(userId);
+  }
+
+  $("refreshBtn").addEventListener("click", loadRecommendations);
 
   const metaResp = await fetch("/api/meta");
   const meta = await metaResp.json();
   renderMeta(meta);
 
-  $("profileForm").addEventListener("submit", async (evt) => {
-    evt.preventDefault();
-    try {
-      await saveAndLoad();
-    } catch (err) {
-      $("profileStatus").textContent = err.message;
-    }
-  });
+  await loadRecommendations();
+}
 
-  $("refreshBtn").addEventListener("click", async () => {
-    try {
-      await saveAndLoad();
-    } catch (err) {
-      $("feedMessage").textContent = err.message;
-    }
-  });
-
-  await saveAndLoad();
+async function init() {
+  const page = getPage();
+  if (page === "onboarding") {
+    await initOnboardingPage();
+  } else if (page === "preferences") {
+    await initPreferencesPage();
+  } else if (page === "feed") {
+    await initFeedPage();
+  }
 }
 
 init().catch((err) => {
   console.error(err);
-  $("cards").innerHTML = `<p>Initialization failed: ${err.message}</p>`;
+  const status = $("onboardingStatus") || $("preferencesStatus") || $("feedMessage");
+  if (status) status.textContent = `Initialization failed: ${err.message}`;
 });

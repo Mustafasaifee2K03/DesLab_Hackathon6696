@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UniSphere | Step 2: Preferences</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="preferences">
+    <div class="ambient"></div>
+    <main class="layout">
+      <header class="hero panel slide-up">
+        <p class="eyebrow">UniSphere Wizard • Step 2 of 3</p>
+        <h1>Set Language and Domain Preferences</h1>
+        <p class="subtitle" id="profileSummary"></p>
+      </header>
+
+      <section class="panel slide-up delay-1">
+        <form id="preferencesForm">
+          <fieldset>
+            <legend>Languages</legend>
+            <p class="helper">Select one or more languages to guide retrieval.</p>
+            <div class="lang-picks" id="languages">
+              <label><input type="checkbox" value="en" checked /> English</label>
+              <label><input type="checkbox" value="ur" /> Urdu</label>
+              <label><input type="checkbox" value="hi" /> Hindi</label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Domain Weights</legend>
+            <div class="sliders" id="weightSliders"></div>
+          </fieldset>
+
+          <div class="actions">
+            <button type="submit">Generate Live Recommendations</button>
+          </div>
+        </form>
+
+        <p id="preferencesStatus" class="status"></p>
+      </section>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
-# UniSphere: Cross-Domain Recommendation Platform
+# UniSphere: Agentic Cross-Domain Recommendation Platform
 
-UniSphere is a complete web product that aggregates and recommends content across five domains in one interface:
+UniSphere is a complete web product that unifies recommendations across:
 
 - Videos
 - Music
@@ -8,70 +8,59 @@ UniSphere is a complete web product that aggregates and recommends content acros
 - Movies
 - News
 
-It solves disconnected discovery workflows by combining multi-domain content into one personalized feed with explainable recommendations.
-It now uses an agentic pipeline built with LangChain + LangGraph to plan, fetch, and rank recommendations.
+It is implemented as an AI-agent style application using LangChain + LangGraph and now runs in dynamic live-data mode (no static seed dependency in runtime flow).
+
+## Current Product Flow (3 Pages)
+
+1. `GET /` (Onboarding)
+- User selects interests from relevant options.
+- User enters demand_text (specific requirement in natural language).
+
+2. `GET /preferences`
+- User selects languages.
+- User sets domain weights.
+
+3. `GET /feed`
+- System shows dynamic recommendations.
+- User can filter and provide feedback.
 
 ## Why this fits Topic 3
 
-- Unified recommendation feed across formats
-- Personalized ranking based on explicit profile + behavioral feedback
-- Cross-domain transfer learning (likes in one domain influence others)
-- Scalable architecture with clear domain adapters and normalized schema
-- AI-agent orchestration using LangChain/LangGraph
-
-## Product Capabilities
-
-- Profile onboarding: interests, mood, languages, and domain weights
-- Hybrid recommendation model:
-  - Interest-tag overlap
-  - Domain preference weighting
-  - Recency/freshness
-  - Popularity
-  - Behavioral affinity from feedback
-  - Cross-domain affinity boost
-- Explainable cards: every recommendation includes a reason
-- Real-time feedback loop: like, dislike, save, hide, view
-- Filter controls: domain, max duration, result count
-- Smart language fallback: if selected languages return no matches, English fallback is applied with an explanatory message
-- Live source sync: fetches fresh content from external providers on-demand and during agent planning
+- Unified multi-domain recommendation experience
+- Cross-domain relevance transfer
+- Agentic orchestration for retrieval planning
+- Dynamic source ingestion for real-world applicability
+- Explainable recommendation cards
 
 ## Architecture
 
 - Backend: FastAPI
+- Agent Orchestration: LangChain tools + LangGraph state graph
 - Storage: SQLite
-- Frontend: Jinja template + modern vanilla JS/CSS
-- Data: seed adapters + live connectors (iTunes, TVMaze, Google News RSS, Internet Archive)
-- Agent runtime: LangChain tools + LangGraph state graph
+- Frontend: Multi-page Jinja templates + vanilla JS
+- Live Connectors: iTunes, TVMaze, Google News RSS, Internet Archive
 
 ### Core modules
 
-- `app/main.py`: API + web routes
-- `app/agentic_workflow.py`: LangGraph recommendation agent (plan -> refresh -> retrieve)
-- `app/live_sources.py`: live provider connectors and normalization
-- `app/database.py`: SQLite schema and queries
-- `app/data_loader.py`: seed ingestion from source files
-- `app/recommender.py`: hybrid scoring and diversity reranking
-- `app/data/sources/*.json`: multi-domain normalized content records
-- `app/templates/index.html`: complete UI
-- `app/static/app.js`: feed, controls, profile handling, feedback actions
-- `app/static/styles.css`: polished responsive UI styling
+- `app/main.py`
+- `app/agentic_workflow.py`
+- `app/recommender.py`
+- `app/live_sources.py`
+- `app/database.py`
+- `app/schemas.py`
+- `app/templates/onboarding.html`
+- `app/templates/preferences.html`
+- `app/templates/feed.html`
+- `app/static/app.js`
+- `app/static/styles.css`
 
-## Normalized Content Schema
+## Recommendation Method Highlights
 
-Every item follows one generalized schema:
-
-- `id`
-- `domain`
-- `title`
-- `description`
-- `tags[]`
-- `language`
-- `duration_minutes`
-- `source`
-- `url`
-- `creator`
-- `published_at`
-- `popularity`
+- Interest and demand_text driven intent parsing
+- Alias-aware relevance expansion (e.g., tech -> ai/technology/engineering/startup)
+- Domain-weight enforcement (0% domains excluded)
+- Feedback-driven affinity updates
+- Agent-triggered live refresh when inventory coverage is weak
 
 ## Run Locally
 
@@ -80,13 +69,9 @@ chmod +x run.sh
 ./run.sh
 ```
 
-Then open:
+Open:
 
 - `http://localhost:8000`
-
-## User Guide
-
-- See `USER_GUIDE.md` for step-by-step usage and troubleshooting.
 
 ## API Endpoints
 
@@ -97,26 +82,9 @@ Then open:
 - `GET /api/users/{user_id}/recommendations`
 - `POST /api/users/{user_id}/feedback`
 - `GET /api/users/{user_id}/feedback`
-- `POST /api/live/refresh`
+- `POST /api/live/refresh` (optional manual refresh)
 
-## Submission Checklist Mapping
+## Documentation
 
-- Complete product: yes (full-stack web app)
-- Usability: onboarding + feed + filters + explanation + responsive UI
-- Effectiveness: personalized hybrid recommendation engine + feedback loop
-- Real-world applicability: unified schema, extensible source adapters, scalable API design
-- Uniqueness: cross-domain transfer scoring and mixed-domain ranking
-
-## Demo Walkthrough
-
-1. Open app and keep default `demo_user`.
-2. Save profile with interests and custom domain weights.
-3. Observe mixed-domain feed and explanation on each card.
-4. Click like/save/dislike/hide on multiple cards.
-5. Refresh feed and observe ranking changes.
-6. Filter by domain and duration.
-
-## Notes
-
-- Data sources are seeded locally for deterministic demo behavior.
-- The adapter pattern allows replacing JSON with live APIs later.
+- `USER_GUIDE.md` for user instructions
+- `DesLab_Hackathon6696_Design_Document.docx` for full design decisions and architecture

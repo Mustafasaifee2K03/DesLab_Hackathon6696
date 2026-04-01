@@ -1,12 +1,12 @@
 # UniSphere User Guide
 
-This guide explains how to use UniSphere effectively and how to troubleshoot missing recommendations.
+This guide explains the updated 3-page dynamic flow.
 
-UniSphere now runs an agentic recommendation workflow using LangChain + LangGraph:
+UniSphere runs an agentic recommendation workflow using LangChain + LangGraph:
 
-- Plan: checks profile + catalog coverage
-- Refresh: fetches live content if coverage is weak
-- Retrieve: ranks and explains recommendations
+- Plan: check current catalog coverage for your profile
+- Refresh: fetch live content when coverage is low
+- Retrieve: rank and explain recommendations
 
 ## 1. Start the app
 
@@ -20,50 +20,32 @@ Open:
 
 - http://localhost:8000
 
-## 2. Create your profile
+## 2. Step 1: Interests + Demand
 
-In Personalization Setup:
+On the first page:
 
 1. Enter User ID and Name.
-2. Add Interests as comma-separated values.
-3. Add Moods as comma-separated values.
-4. Select one or more Languages.
-5. Set Domain Weights (videos, music, podcasts, movies, news).
-6. Click Save Profile.
-7. Click Load Recommendations.
+2. Select relevant interests from the list.
+3. Enter demand_text (specific content requirement in your own words).
+4. Click Continue to Preferences.
 
-## 3. Understand filters
+## 3. Step 2: Preferences
 
-In Feed Controls:
+On the second page:
+
+1. Select language(s).
+2. Set domain weights (videos, music, podcasts, movies, news).
+3. Click Generate Live Recommendations.
+
+## 4. Step 3: Feed
+
+On the feed page:
 
 - Domain: choose one domain (or All).
 - Max Duration: content longer than this value is excluded.
 - Result Limit: number of recommendations requested.
 
-Click Refresh Feed after changing filters.
-
-## 3.1 Sync live content
-
-Use the `Sync Live Sources` button in Feed Controls when you want fresh content from external platforms.
-
-It calls live providers (music, podcasts, movies, videos, and news) and stores normalized records in your catalog.
-
-## 4. Why music may appear empty (and what now happens)
-
-If you choose a language with little or no content (for example Hindi/Urdu in demo data), music feed may become empty.
-
-Current system behavior:
-
-- UniSphere now automatically includes English fallback content when selected languages return no matches.
-- A message appears above the feed telling you fallback was applied.
-
-If you still see no results:
-
-1. Increase Max Duration.
-2. Switch Domain to All to verify profile behavior.
-3. Ensure at least one language is selected.
-4. Reduce very narrow filters.
-5. Use `Sync Live Sources` and then `Refresh Feed`.
+Click Refresh Results after changing filters.
 
 ## 5. Feedback controls
 
@@ -80,23 +62,19 @@ Feedback updates future ranking in real time.
 
 For best personalized results:
 
-1. Use 3 to 8 relevant interests.
-2. Keep domain weights balanced unless you want a specialized feed.
-3. Give at least 10 to 20 feedback actions for stronger personalization.
+1. Select focused interests that truly match your intent.
+2. Write demand_text with specifics (topic + format + recency + language preference).
+3. Keep domain weights aligned with your actual preference.
+4. Give feedback on at least 10 items to improve personalization.
 
-## 7. Known demo-data limitation
+## 7. Dynamic content note
 
-The included seed dataset is mostly English. This is expected for the hackathon demo package.
-
-Production expansion path:
-
-- Add multilingual source adapters.
-- Increase per-domain catalog size.
-- Use locale-specific ranking weights.
+The app now uses live dynamic sources at runtime. It no longer depends on local static seed catalogs for feed generation.
 
 ## 8. Quick troubleshooting
 
-- No feed loaded: save profile first.
-- Empty feed after filters: broaden domain, increase duration, keep English selected.
-- Unexpected recommendations: provide more likes/dislikes to refine model.
-- Server not reachable: rerun `./run.sh` and ensure port 8000 is free.
+- Cannot continue from step 1: choose at least one interest and provide detailed demand text.
+- Empty feed: broaden domain, increase max duration, or include English.
+- Low relevance: refine demand_text with clear keywords (for example: "latest AI engineering podcasts and startup analysis").
+- Links do not open: ensure network access and disable popup blocking for localhost.
+- Server not reachable: rerun `./run.sh` and check port 8000 availability.

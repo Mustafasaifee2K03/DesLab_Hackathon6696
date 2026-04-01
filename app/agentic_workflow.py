@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, TypedDict
 
 from langchain_core.tools import tool
@@ -89,7 +90,12 @@ def _refresh_live_node(state: AgentState) -> AgentState:
     domain = state.get("domain")
 
     domains = [domain] if domain else list(profile.get("domain_weights", {}).keys())
-    query_terms = (profile.get("interests", []) + profile.get("moods", []))[:3] or ["trending"]
+    demand_tokens = [
+        token
+        for token in re.split(r"\W+", profile.get("demand_text", "").lower())
+        if len(token) > 2
+    ]
+    query_terms = (profile.get("interests", []) + demand_tokens)[:6] or ["trending"]
     languages = profile.get("languages", []) or ["en"]
 
     refresh_result = refresh_live_sources_tool.invoke(
