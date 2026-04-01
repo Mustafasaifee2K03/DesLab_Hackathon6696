@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+app/recommendation.db
+.DS_Store
+.idea/
+.vscode/
